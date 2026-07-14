@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Settings - Face Attendance{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>Recognition Settings</h2>
+  <form method="post">
+    <div class="grid">
+      <label>Tolerance (face distance)
+        <input name="tolerance" type="number" step="0.01" min="0.2" max="0.8" value="{{ settings.tolerance }}" required>
+      </label>
+    </div>
+    <p class="subtitle">Lower tolerance = stricter matching. Recommended range: 0.35–0.55.</p>
+
+    <label style="display:flex; align-items:center; gap:8px; margin-top:8px;">
+      <input type="checkbox" name="liveness_enabled" style="width:auto;" {% if settings.liveness_enabled %}checked{% endif %}>
+      Enable liveness check (rejects a static printed photo/screen held in front of the camera)
+    </label>
+
+    <div class="controls" style="margin-top:20px;"><button type="submit">Save Recognition Settings</button></div>
+  </form>
+</section>
+
+<section class="card" style="margin-top:20px;">
+  <h2>Attendance Alerts</h2>
+  <p class="subtitle">Students below this attendance % can be flagged from the Dashboard and emailed automatically.</p>
+  <form method="post">
+    <input type="hidden" name="tolerance" value="{{ settings.tolerance }}">
+    <input type="hidden" name="liveness_enabled" value="{{ 'on' if settings.liveness_enabled else '' }}">
+    <div class="grid">
+      <label>Low-attendance threshold (%)
+        <input name="attendance_alert_threshold" type="number" step="1" min="0" max="100" value="{{ settings.attendance_alert_threshold }}">
+      </label>
+    </div>
+
+    <h2 style="font-size:16px; margin-top:20px;">Email (SMTP) configuration</h2>
+    <div class="grid">
+      <label>SMTP Host <input name="smtp_host" type="text" value="{{ settings.smtp_host }}" placeholder="smtp.gmail.com"></label>
+      <label>SMTP Port <input name="smtp_port" type="number" value="{{ settings.smtp_port }}" placeholder="587"></label>
+      <label>SMTP Username <input name="smtp_username" type="text" value="{{ settings.smtp_username }}" placeholder="you@gmail.com"></label>
+      <label>SMTP Password <input name="smtp_password" type="password" placeholder="{{ '(unchanged)' if settings.smtp_password else 'App password' }}"></label>
+      <label>From Address <input name="smtp_from" type="text" value="{{ settings.smtp_from }}" placeholder="attendance@college.edu"></label>
+    </div>
+    <label style="display:flex; align-items:center; gap:8px;">
+      <input type="checkbox" name="smtp_use_tls" style="width:auto;" {% if settings.smtp_use_tls %}checked{% endif %}>
+      Use STARTTLS (recommended, works with Gmail/Outlook on port 587)
+    </label>
+    <p class="subtitle">For Gmail, use an "App Password" (not your normal password) — generate one from your Google Account security settings.</p>
+
+    <div class="controls" style="margin-top:12px;"><button type="submit">Save Alert Settings</button></div>
+  </form>
+</section>
+
+<p class="subtitle" style="margin-top:12px;">Last updated: {{ settings.last_updated }}</p>
+{% endblock %}

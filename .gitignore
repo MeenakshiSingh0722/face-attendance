@@ -1,0 +1,26 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.pyc
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+
+# Runtime-generated data (auto-created on first run; must NOT be committed)
+data/database.sqlite
+data/secret.key
+data/settings.json
+
+# Logs / env files
+*.log
+.env
+
+# OS junk
+.DS_Store
+Thumbs.db

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Bulk Import - Face Attendance{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>Bulk Import Students</h2>
+  <p class="subtitle">
+    Upload a ZIP of student photos to enroll many students at once, instead of one-by-one on the
+    Enroll page. Name each image <code>&lt;roll&gt;_anything.jpg</code> (e.g.
+    <code>2021CS101_1.jpg</code>, <code>2021CS101_2.jpg</code>) — multiple photos per roll are
+    averaged into one face encoding, just like capturing multiple webcam samples.
+  </p>
+
+  {% if error %}<div class="alert error">⚠️ {{ error }}</div>{% endif %}
+
+  <form method="post" enctype="multipart/form-data" id="importForm">
+    <div class="grid">
+      <label>Photos ZIP <input type="file" name="zip_file" accept=".zip" required></label>
+      <label>Roster CSV (optional — columns: roll,name,class_section)
+        <input type="file" name="mapping_csv" accept=".csv">
+      </label>
+    </div>
+    <p class="subtitle">
+      Without a roster CSV, each student's name defaults to their roll number and class defaults
+      to "Unknown" — you can fix these later directly in the database, or re-run with a CSV.
+    </p>
+    <div class="controls">
+      <button type="submit" id="importBtn">📦 Import Students</button>
+    </div>
+  </form>
+</section>
+
+{% if results is not none %}
+<section class="card" style="margin-top:20px;">
+  <h2>Import Results</h2>
+  <div class="alert {{ 'success' if added_count == total_count and total_count > 0 else 'warning' }}">
+    {{ added_count }} of {{ total_count }} student(s) imported successfully.
+  </div>
+  <table>
+    <thead><tr><th>Roll</th><th>Name</th><th>Status</th><th>Detail</th></tr></thead>
+    <tbody>
+      {% for r in results %}
+      <tr>
+        <td>{{ r.roll or '—' }}</td>
+        <td>{{ r.name or '—' }}</td>
+        <td>
+          {% if r.status == 'added' %}<span style="color:var(--success); font-weight:700;">✅ Added</span>
+          {% else %}<span style="color:var(--danger); font-weight:700;">❌ Error</span>{% endif %}
+        </td>
+        <td>{{ r.detail }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+<script>
+document.getElementById('importForm').addEventListener('submit', (e) => {
+  const btn = document.getElementById('importBtn');
+  btn.disabled = true;
+  btn.textContent = 'Importing... this can take a minute for many photos';
+});
+</script>
+{% endblock %}

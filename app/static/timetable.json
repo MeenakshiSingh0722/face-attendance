@@ -1,0 +1,6 @@
+{
+  "CSE-A": ["DBMS", "OS", "TOC", "Computer Networks", "Software Engineering", "Maths-III"],
+  "CSE-B": ["AI", "ML", "DS", "Computer Networks", "Software Engineering", "Maths-III"],
+  "ECE-A": ["Digital Electronics", "Signals & Systems", "Microprocessors"],
+  "Common": ["Workshop", "Seminar", "Library", "Sports"]
+}

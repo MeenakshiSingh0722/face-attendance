@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Reports - Face Attendance{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>Reports & Export</h2>
+  <p class="subtitle">Filter attendance records by date, class, or subject and export as CSV.</p>
+  <div class="grid">
+    <label>Date From <input id="from" type="date"></label>
+    <label>Date To <input id="to" type="date"></label>
+    <label>Class/Section <input id="cls" type="text"></label>
+    <label>Subject <input id="sub" type="text"></label>
+  </div>
+  <div class="controls">
+    <button id="load">🔍 Load</button>
+    <a id="export" class="button secondary" href="#">⬇️ Export CSV</a>
+  </div>
+  <table id="tbl">
+    <thead><tr><th>ID</th><th>Name</th><th>Roll</th><th>Class</th><th>Timestamp (UTC)</th><th>Subject</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<script>
+const tbody = document.querySelector('#tbl tbody');
+function q(sel){ return document.querySelector(sel).value; }
+
+document.getElementById('load').onclick = async () => {
+  const url = new URL('/api/attendance', location.origin);
+  if (q('#from')) url.searchParams.set('date_from', q('#from'));
+  if (q('#to')) url.searchParams.set('date_to', q('#to'));
+  if (q('#cls')) url.searchParams.set('class_section', q('#cls'));
+  if (q('#sub')) url.searchParams.set('subject', q('#sub'));
+  const res = await fetch(url.toString());
+  const data = await res.json();
+  tbody.innerHTML = data.data.map(r => `<tr><td>${r.id}</td><td>${r.name}</td><td>${r.roll}</td><td>${r.class_section}</td><td>${r.timestamp}</td><td>${r.subject||''}</td></tr>`).join('');
+};
+
+document.getElementById('export').onclick = (e) => {
+  e.preventDefault();
+  const url = new URL('/api/export_csv', location.origin);
+  const f = document.getElementById('from').value;
+  const t = document.getElementById('to').value;
+  const c = document.getElementById('cls').value;
+  const s = document.getElementById('sub').value;
+  if (f) url.searchParams.set('date_from', f);
+  if (t) url.searchParams.set('date_to', t);
+  if (c) url.searchParams.set('class_section', c);
+  if (s) url.searchParams.set('subject', s);
+  window.location = url.toString();
+};
+</script>
+{% endblock %}

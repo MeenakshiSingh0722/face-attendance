@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Home - Face Attendance{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Welcome, {{ session.get('user').username if session.get('user') else 'Guest' }} 👋</h1>
+  <p class="subtitle">A simple, on-device face recognition attendance system.</p>
+  <div class="grid">
+    <div class="card" style="box-shadow:none;">
+      <h2>1. Enroll</h2>
+      <p class="subtitle">Register students with a few webcam samples.</p>
+      <a class="button" href="{{ url_for('enroll_page') }}">Go to Enroll →</a>
+    </div>
+    <div class="card" style="box-shadow:none;">
+      <h2>2. Attendance</h2>
+      <p class="subtitle">Mark attendance live or via group photo auto-scan.</p>
+      <a class="button" href="{{ url_for('attendance_page') }}">Go to Attendance →</a>
+    </div>
+    <div class="card" style="box-shadow:none;">
+      <h2>3. Reports</h2>
+      <p class="subtitle">Filter attendance records and export as CSV.</p>
+      <a class="button" href="{{ url_for('reports_page') }}">Go to Reports →</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

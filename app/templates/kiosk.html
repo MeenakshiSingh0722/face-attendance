@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Kiosk - Face Attendance{% endblock %}
+{% block content %}
+<div style="min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; background:var(--bg);">
+  <div class="auth-card" style="max-width:560px; width:100%; text-align:center;">
+    <div class="auth-logo">📷</div>
+    <h1>Self Check-In</h1>
+    <p class="tagline">Look at the camera to mark your attendance</p>
+
+    <div class="grid" style="text-align:left;">
+      <label>Class/Section <input id="cls" type="text" placeholder="e.g., CSE-A"></label>
+      <label>Subject <select id="subject"><option value="">(Choose)</option></select></label>
+    </div>
+
+    <video id="video" autoplay playsinline style="margin-top:12px;"></video>
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <div class="controls" style="justify-content:center; margin-top:14px;">
+      <button id="start">🎥 Start Camera</button>
+      <button id="toggleScan" class="secondary" disabled>▶️ Start Auto Check-In</button>
+    </div>
+
+    <div id="result" style="margin-top:16px; min-height:32px;"></div>
+    <p class="auth-hint">This device only marks attendance — no other data is accessible here.</p>
+  </div>
+</div>
+
+<script>
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const result = document.getElementById('result');
+const startBtn = document.getElementById('start');
+const toggleBtn = document.getElementById('toggleScan');
+let stream = null;
+let scanning = false;
+let scanInterval = null;
+let markedSet = new Set();
+
+async function loadTimetable() {
+  try {
+    const res = await fetch('/static/timetable.json');
+    const data = await res.json();
+    const sel = document.getElementById('subject');
+    const clsInput = document.getElementById('cls');
+    function buildOptions(cls) {
+      sel.innerHTML = '<option value="">(Choose)</option>';
+      const arr = data[cls] || data['Common'] || [];
+      arr.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sel.appendChild(o); });
+    }
+    clsInput.addEventListener('change', (e) => buildOptions(e.target.value));
+    buildOptions(clsInput.value);
+  } catch (e) { console.warn('timetable load failed', e); }
+}
+loadTimetable();
+
+startBtn.onclick = async () => {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    video.srcObject = stream;
+    toggleBtn.disabled = false;
+    result.innerHTML = '<div class="alert success">✅ Camera ready. Click "Start Auto Check-In".</div>';
+  } catch (err) {
+    result.innerHTML = '<div class="alert error">⚠️ Could not access camera: ' + err.message + '</div>';
+  }
+};
+
+function captureFrame() {
+  const w = 480, h = 360;
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, w, h);
+  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+}
+
+async function scanOnce() {
+  if (!stream) return;
+  const blob1 = await captureFrame();
+  await new Promise(r => setTimeout(r, 600));
+  const blob2 = await captureFrame();
+
+  const fd = new FormData();
+  fd.append('image', blob1, 'f1.jpg');
+  fd.append('image2', blob2, 'f2.jpg');
+  fd.append('subject', document.getElementById('subject').value);
+  fd.append('class_section', document.getElementById('cls').value);
+
+  try {
+    const res = await fetch('/api/kiosk_recognize', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!data.ok || !data.results || !data.results.length) return;
+    data.results.forEach(r => {
+      if (r.match) {
+        result.innerHTML = `<div class="alert success">✅ Welcome, ${r.name} (${r.roll})! Attendance marked.</div>`;
+      } else if (r.reason === 'liveness_failed') {
+        result.innerHTML = `<div class="alert warning">⚠️ Please look directly at the camera (liveness check failed).</div>`;
+      } else {
+        result.innerHTML = `<div class="alert error">❌ Face not recognized. Please see your instructor.</div>`;
+      }
+    });
+  } catch (err) {
+    console.warn('scan error', err);
+  }
+}
+
+toggleBtn.onclick = () => {
+  scanning = !scanning;
+  if (scanning) {
+    toggleBtn.textContent = '⏸️ Pause Auto Check-In';
+    scanInterval = setInterval(scanOnce, 3000);
+    scanOnce();
+  } else {
+    toggleBtn.textContent = '▶️ Start Auto Check-In';
+    clearInterval(scanInterval);
+  }
+};
+</script>
+{% endblock %}

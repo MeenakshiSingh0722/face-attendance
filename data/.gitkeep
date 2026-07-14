@@ -1,0 +1,3 @@
+This folder holds the runtime-generated SQLite database, secret key, and settings.json.
+These are intentionally NOT committed to git (see .gitignore) — they are auto-created
+the first time the app runs, and are specific to each deployment/environment.

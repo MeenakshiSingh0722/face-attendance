@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Face Attendance{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>Attendance Dashboard</h2>
+  <p class="subtitle">Attendance % per student and low-attendance defaulters.</p>
+
+  <div class="grid">
+    <label>Class/Section <select id="cls"><option value="">All</option></select></label>
+    <label>Subject <select id="sub"><option value="">All</option></select></label>
+    <label>Date From <input id="from" type="date"></label>
+    <label>Date To <input id="to" type="date"></label>
+  </div>
+  <div class="controls">
+    <button id="load">🔍 Load Dashboard</button>
+    <button id="sendAlerts" class="secondary">📧 Send Alerts to Defaulters</button>
+  </div>
+  <div id="alertMsg"></div>
+
+  <div style="display:flex; gap:16px; margin:16px 0; flex-wrap:wrap;">
+    <div class="card" style="flex:1; min-width:160px; box-shadow:none; text-align:center;">
+      <div style="font-size:12px; color:var(--muted); font-weight:700; text-transform:uppercase;">Total Sessions</div>
+      <div id="totalSessions" style="font-size:28px; font-weight:700; margin-top:6px;">—</div>
+    </div>
+    <div class="card" style="flex:1; min-width:160px; box-shadow:none; text-align:center;">
+      <div style="font-size:12px; color:var(--muted); font-weight:700; text-transform:uppercase;">Students Tracked</div>
+      <div id="totalStudents" style="font-size:28px; font-weight:700; margin-top:6px;">—</div>
+    </div>
+    <div class="card" style="flex:1; min-width:160px; box-shadow:none; text-align:center;">
+      <div style="font-size:12px; color:var(--muted); font-weight:700; text-transform:uppercase;">Below Threshold</div>
+      <div id="totalDefaulters" style="font-size:28px; font-weight:700; margin-top:6px; color:var(--danger);">—</div>
+    </div>
+  </div>
+
+  <canvas id="attendanceChart" height="90"></canvas>
+</section>
+
+<section class="card" style="margin-top:20px;">
+  <h2>⚠️ Defaulters (below threshold)</h2>
+  <table id="defaultersTbl">
+    <thead><tr><th>Name</th><th>Roll</th><th>Class</th><th>Attended</th><th>Total</th><th>%</th><th>Email</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script>
+let chart = null;
+
+function q(sel) { return document.getElementById(sel).value; }
+
+async function populateClassDropdown() {
+  const res = await fetch('/api/dashboard_stats');
+  const data = await res.json();
+  const clsSel = document.getElementById('cls');
+  data.class_sections.forEach(c => {
+    const o = document.createElement('option'); o.value = c; o.textContent = c; clsSel.appendChild(o);
+  });
+}
+
+async function loadDashboard() {
+  const url = new URL('/api/dashboard_stats', location.origin);
+  if (q('cls')) url.searchParams.set('class_section', q('cls'));
+  if (q('sub')) url.searchParams.set('subject', q('sub'));
+  if (q('from')) url.searchParams.set('date_from', q('from'));
+  if (q('to')) url.searchParams.set('date_to', q('to'));
+
+  const res = await fetch(url.toString());
+  const data = await res.json();
+  if (!data.ok) { return; }
+
+  document.getElementById('totalSessions').textContent = data.total_sessions;
+  document.getElementById('totalStudents').textContent = data.stats.length;
+  document.getElementById('totalDefaulters').textContent = data.defaulters.length;
+
+  // subject dropdown (repopulate based on class filter)
+  const subSel = document.getElementById('sub');
+  const prevSub = subSel.value;
+  subSel.innerHTML = '<option value="">All</option>';
+  data.subjects.forEach(s => {
+    const o = document.createElement('option'); o.value = s; o.textContent = s; subSel.appendChild(o);
+  });
+  if (data.subjects.includes(prevSub)) subSel.value = prevSub;
+
+  // chart
+  const labels = data.stats.map(s => s.name);
+  const values = data.stats.map(s => s.percentage ?? 0);
+  const colors = values.map(v => v < data.threshold ? '#dc2626' : '#059669');
+
+  const ctx = document.getElementById('attendanceChart').getContext('2d');
+  if (chart) chart.destroy();
+  chart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Attendance %', data: values, backgroundColor: colors }] },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, max: 100 } }
+    }
+  });
+
+  // defaulters table
+  const tbody = document.querySelector('#defaultersTbl tbody');
+  tbody.innerHTML = data.defaulters.map(s => `
+    <tr>
+      <td>${s.name}</td><td>${s.roll}</td><td>${s.class_section}</td>
+      <td>${s.present_days}</td><td>${s.total_sessions}</td>
+      <td style="color:var(--danger); font-weight:700;">${s.percentage}%</td>
+      <td>${s.email || '<span style="color:var(--muted);">none</span>'}</td>
+    </tr>`).join('') || '<tr><td colspan="7" style="text-align:center; color:var(--muted);">No defaulters 🎉</td></tr>';
+}
+
+document.getElementById('load').onclick = loadDashboard;
+document.getElementById('cls').addEventListener('change', loadDashboard);
+
+document.getElementById('sendAlerts').onclick = async () => {
+  const btn = document.getElementById('sendAlerts');
+  btn.disabled = true; btn.textContent = 'Sending...';
+  const msg = document.getElementById('alertMsg');
+  const fd = new FormData();
+  if (q('cls')) fd.append('class_section', q('cls'));
+  if (q('sub')) fd.append('subject', q('sub'));
+  if (q('from')) fd.append('date_from', q('from'));
+  if (q('to')) fd.append('date_to', q('to'));
+  try {
+    const res = await fetch('/api/send_alerts', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.ok) {
+      if (data.note) {
+        msg.innerHTML = `<div class="alert success">✅ ${data.note}</div>`;
+      } else {
+        const sent = data.results.filter(r => r.ok).length;
+        const failed = data.results.length - sent;
+        msg.innerHTML = `<div class="alert ${failed ? 'warning' : 'success'}">📧 Sent ${sent} alert(s)${failed ? `, ${failed} failed (check Settings → SMTP)` : ''}.</div>`;
+      }
+    } else {
+      msg.innerHTML = `<div class="alert error">❌ ${data.error || 'Unknown error'}</div>`;
+    }
+  } catch (err) {
+    msg.innerHTML = `<div class="alert error">❌ Network error: ${err.message}</div>`;
+  } finally {
+    btn.disabled = false; btn.textContent = '📧 Send Alerts to Defaulters';
+  }
+};
+
+populateClassDropdown().then(loadDashboard);
+</script>
+{% endblock %}

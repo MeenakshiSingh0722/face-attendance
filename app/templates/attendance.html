@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Attendance - Face Attendance{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>Mark Attendance</h2>
+  <p class="subtitle">Start the camera, choose subject/class, then mark or enable auto-scan for group photos.</p>
+  <div class="grid">
+    <label>Subject <select id="subject"><option value="">(Choose)</option></select></label>
+    <label>Class/Section <input id="cls" type="text" placeholder="e.g., CSE-A"></label>
+  </div>
+  <div class="grid">
+    <label>Camera <select id="cameraList"><option value="default">Default</option></select></label>
+    <label>Device ID (optional) <input id="deviceId" type="text" placeholder="e.g., lab-1"></label>
+  </div>
+  <div class="controls">
+    <button id="start" class="secondary">🎥 Start Camera</button>
+    <button id="mark">✅ Mark</button>
+    <label style="display:inline-flex; align-items:center; gap:6px; margin-left:8px; font-weight:500;">
+      <input type="checkbox" id="autoScan" style="width:auto;"> Auto-scan (group photo)
+    </label>
+  </div>
+  <video id="video" autoplay playsinline></video>
+  <canvas id="canvas" style="display:none;"></canvas>
+  <div id="result"></div>
+</section>
+
+<script>
+const video2 = document.getElementById('video');
+const canvas2 = document.getElementById('canvas');
+const result = document.getElementById('result');
+let stream2 = null;
+
+async function populateCameras() {
+  const cams = await navigator.mediaDevices.enumerateDevices();
+  const videoInputs = cams.filter(c => c.kind === 'videoinput');
+  const sel = document.getElementById('cameraList');
+  sel.innerHTML = '';
+  videoInputs.forEach((v, i) => {
+    const opt = document.createElement('option'); opt.value = v.deviceId; opt.textContent = v.label || 'Camera ' + (i+1);
+    sel.appendChild(opt);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', populateCameras);
+
+document.getElementById('start').onclick = async () => {
+  const cam = document.getElementById('cameraList').value;
+  if (stream2) {
+    stream2.getTracks().forEach(t => t.stop());
+    stream2 = null;
+  }
+  const constraints = cam && cam !== 'default' ? { video: { deviceId: { exact: cam } }, audio: false } : { video: true, audio: false };
+  stream2 = await navigator.mediaDevices.getUserMedia(constraints);
+  video2.srcObject = stream2;
+};
+
+// Mark will capture two frames ~800ms apart and send both for liveness
+document.getElementById('mark').onclick = async () => {
+  if (!stream2) return;
+  const w = 480, h = 360;
+  canvas2.width = w; canvas2.height = h;
+  const ctx = canvas2.getContext('2d');
+  // first frame
+  ctx.drawImage(video2, 0, 0, w, h);
+  canvas2.toBlob(async (blob1) => {
+    // wait a bit for slight movement
+    await new Promise(r => setTimeout(r, 800));
+    ctx.drawImage(video2, 0, 0, w, h);
+    canvas2.toBlob(async (blob2) => {
+      const fd = new FormData();
+      fd.append('image', blob1, 'frame1.jpg');
+      fd.append('image2', blob2, 'frame2.jpg');
+      fd.append('subject', document.getElementById('subject').value);
+      fd.append('class_section', document.getElementById('cls').value);
+      const did = document.getElementById('deviceId').value || 'browser';
+      fd.append('device_id', did);
+      const res = await fetch('/api/recognize', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (data.ok) {
+        result.innerHTML = data.results.map(r => r.match ? `✅ ${r.name} (${r.roll})` : (r.reason === 'liveness_failed' ? `⚠️ Liveness failed` : `❌ No match (dist=${r.distance?.toFixed ? r.distance.toFixed(3) : r.distance})`)).join('<br>');
+      } else {
+        result.textContent = "Error: " + (data.error || 'unknown');
+      }
+    }, 'image/jpeg', 0.9);
+  }, 'image/jpeg', 0.9);
+};
+
+// populate subject dropdown based on timetable JSON
+async function loadTimetable() {
+  try {
+    const res = await fetch('/static/timetable.json');
+    const data = await res.json();
+    const sel = document.getElementById('subject');
+    sel.innerHTML = '<option value="">(Choose)</option>';
+    // If class provided prefill
+    const clsInput = document.getElementById('cls');
+    function buildOptionsForClass(cls) {
+      sel.innerHTML = '<option value="">(Choose)</option>';
+      const arr = data[cls] || data['Common'] || [];
+      arr.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sel.appendChild(o); });
+    }
+    document.getElementById('cls').addEventListener('change', (e) => buildOptionsForClass(e.target.value));
+    // initial
+    buildOptionsForClass(document.getElementById('cls').value);
+  } catch (e) {
+    console.warn('Could not load timetable', e);
+  }
+}
+loadTimetable();
+</script>
+{% endblock %}
+
+<script>
+// Auto-scan mode: capture group photo and call /api/auto_scan
+let markedSet = new Set(); // client-side duplicate suppression for this session
+async function doAutoScan() {
+  if (!stream2) return;
+  const w = 1280, h = 720;
+  canvas2.width = w; canvas2.height = h;
+  const ctx = canvas2.getContext('2d');
+  ctx.drawImage(video2, 0, 0, w, h);
+  canvas2.toBlob(async (blob) => {
+    const fd = new FormData();
+    fd.append('image', blob, 'group.jpg');
+    fd.append('subject', document.getElementById('subject').value);
+    fd.append('class_section', document.getElementById('cls').value);
+    fd.append('device_id', document.getElementById('deviceId').value || 'browser');
+    const res = await fetch('/api/auto_scan', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.ok) {
+      const newMatches = [];
+      data.matches.forEach(m => {
+        if (!markedSet.has(m.student_id)) {
+          markedSet.add(m.student_id);
+          newMatches.push(`✅ ${m.name} (${m.roll})`);
+        }
+      });
+      if (newMatches.length) {
+        result.innerHTML = (result.innerHTML ? result.innerHTML + '<br>' : '') + newMatches.join('<br>');
+      } else {
+        result.innerHTML = result.innerHTML || 'No new matches';
+      }
+    } else {
+      console.warn(data);
+    }
+  }, 'image/jpeg', 0.9);
+}
+
+document.getElementById('autoScan').addEventListener('change', (e) => {
+  if (e.target.checked) {
+    // periodically auto-scan every 5 seconds
+    window._autoScanInterval = setInterval(doAutoScan, 5000);
+  } else {
+    if (window._autoScanInterval) clearInterval(window._autoScanInterval);
+  }
+});
+</script>

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Face Attendance{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+  {% if not hide_nav %}
+  <nav class="nav">
+    <div class="brand"><span class="dot"></span> Face Attendance</div>
+    <div class="links">
+      <a href="{{ url_for('index') }}">Home</a>
+      <a href="{{ url_for('enroll_page') }}">Enroll</a>
+      <a href="{{ url_for('attendance_page') }}">Attendance</a>
+      <a href="{{ url_for('reports_page') }}">Reports</a>
+      {% if session.get('user') %}
+        <a href="{{ url_for('dashboard_page') }}">Dashboard</a>
+        {% if session.get('user').role == 'admin' %}
+          <a href="{{ url_for('bulk_import_page') }}">Bulk Import</a>
+          <a href="{{ url_for('settings_page') }}">Settings</a>
+        {% endif %}
+        <a href="{{ url_for('change_password') }}">Change Password</a>
+        <a href="{{ url_for('account_settings') }}">Account</a>
+        <a href="#" class="user-chip">👤 {{ session.get('user').username }}</a>
+        <a href="{{ url_for('logout') }}" class="logout">Logout</a>
+      {% else %}
+        <a href="{{ url_for('login_page') }}">Login</a>
+      {% endif %}
+    </div>
+  </nav>
+  {% endif %}
+  <main class="{% if hide_nav %}{% else %}container{% endif %}">
+    {% block content %}{% endblock %}
+  </main>
+  <script src="{{ url_for('static', filename='js/webcam.js') }}"></script>
+</body>
+</html>

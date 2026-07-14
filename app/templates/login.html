@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Login - Face Attendance{% endblock %}
+{% block content %}
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-logo">👁️</div>
+    <h1>Welcome back</h1>
+    <p class="tagline">Sign in to manage attendance</p>
+
+    {% if error %}
+      <div class="alert error">⚠️ {{ error }}</div>
+    {% endif %}
+
+    <form method="post" id="loginForm">
+      <div class="field">
+        <label for="username">Username</label>
+        <div class="input-wrap">
+          <input type="text" id="username" name="username" placeholder="e.g. admin"
+                 value="{{ username or '' }}" required autofocus autocomplete="username">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="password">Password</label>
+        <div class="input-wrap">
+          <input type="password" id="password" name="password" placeholder="Enter your password"
+                 required autocomplete="current-password">
+          <button type="button" class="toggle-pass" id="togglePass">Show</button>
+        </div>
+      </div>
+
+      <button type="submit" id="loginBtn">
+        <span id="btnText">Log In</span>
+        <span class="spinner" id="spinner"></span>
+      </button>
+    </form>
+
+    <p class="auth-hint">Default admin credentials: <b>admin</b> / <b>admin</b><br>Please change this password after your first login.</p>
+  </div>
+</div>
+
+<script>
+  const togglePass = document.getElementById('togglePass');
+  const passField = document.getElementById('password');
+  togglePass.addEventListener('click', () => {
+    const isPass = passField.type === 'password';
+    passField.type = isPass ? 'text' : 'password';
+    togglePass.textContent = isPass ? 'Hide' : 'Show';
+  });
+
+  const form = document.getElementById('loginForm');
+  const btn = document.getElementById('loginBtn');
+  const btnText = document.getElementById('btnText');
+  const spinner = document.getElementById('spinner');
+  form.addEventListener('submit', () => {
+    btn.disabled = true;
+    btnText.textContent = 'Logging in...';
+    spinner.style.display = 'inline-block';
+  });
+</script>
+{% endblock %}

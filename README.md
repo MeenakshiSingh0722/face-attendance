@@ -3,27 +3,11 @@
 A Flask-based attendance system that enrolls students via webcam face samples and
 marks attendance by recognizing faces live, from a group photo, or via a self-service kiosk.
 
----
-
-## 🔧 What was fixed from the original code
-
-The original project had 3 bugs that prevented it from running at all, plus an unprotected,
-unstyled login flow:
-
-| # | Bug | Fix |
-|---|-----|-----|
-| 1 | `/login` route defined **twice** → Flask crashes on startup (`AssertionError: View function mapping is overwriting an existing endpoint`). | Merged into one `/login` route. |
-| 2 | `db_extra.py` used a relative import (`from .db import ...`) but was loaded as a flat module → `ImportError`. | Changed to `from db import DB_PATH, get_conn`. |
-| 3 | `/api/auto_scan` used `cv2`/`face_recognition` without importing them → `NameError` at request time. | Added the missing imports. |
-| 4 | Login page was a bare unstyled `<form>` — no error display, no password toggle, no loading state. | Rebuilt as a centered card with logo, inline error alert, show/hide password, disabled+spinner state on submit. |
-| 5 | Every page and API route was reachable **without logging in** — only the nav link hid itself. | Added `@login_required` everywhere; `/settings` and `/bulk_import` also require `role == 'admin'`. |
-| 6 | Flask `secret_key` silently fell back to a hardcoded string if `data/secret.key` was missing. | Now auto-generates and persists a random 64-char key on first run. |
-
-The whole UI was also restyled with a consistent design system (`app/static/css/styles.css`).
+**Live deployment:** `https://face-attendance-system.up.railway.app/` (hosted on Railway)
 
 ---
 
-## ✨ Features added beyond the original scope
+## ✨ Features
 
 1. **Dashboard** (`/dashboard`) — Chart.js bar chart of per-student attendance %, filterable by
    class/subject/date range, plus a defaulters table (students below a configurable threshold).
@@ -37,7 +21,6 @@ The whole UI was also restyled with a consistent design system (`app/static/css/
    This is a best-effort deterrent, not certified anti-spoofing.
 4. **Self-service Kiosk mode** (`/kiosk`, no login) — mount a device at a classroom entrance;
    students look at the camera and are recognized + marked present automatically (liveness-checked).
-   Exposes nothing except recognition.
 5. **Bulk student import** (`/bulk_import`, admin only) — upload a ZIP of photos named
    `<roll>_anything.jpg` plus an optional roster CSV (`roll,name,class_section`); the server groups
    images by roll, computes encodings, and enrolls everyone in one pass.
@@ -74,7 +57,7 @@ Face-Recognition-Based-Attendance-System-main/
 │   │   └── timetable.json   # subject list per class
 │   └── templates/           # Jinja2 templates
 ├── data/                    # runtime-generated: database.sqlite, secret.key, settings.json
-│                            # (gitignored — auto-created on first run, see data/.gitkeep)
+│                            # (gitignored — auto-created on first run, persisted via Railway volume)
 ├── scripts/                 # CLI bulk-import / CSV import helpers
 ├── tests/smoke.py           # tiny sanity script
 ├── requirements.txt
@@ -85,42 +68,55 @@ Face-Recognition-Based-Attendance-System-main/
 
 ---
 
-## 📤 Pushing this to GitHub
+## 🗄️ Database
 
-This project already has a local git repo initialized with one commit, and a `.gitignore` that
-correctly excludes generated secrets/data (`data/database.sqlite`, `data/secret.key`,
-`data/settings.json`, `venv/`, `__pycache__/`).
+SQLite, stored at `data/database.sqlite` inside the persistent Railway volume. Three tables:
 
-1. Create a new **empty** repository on GitHub (don't add a README/license there — this project
-   already has its own, and that would conflict on push).
-2. From inside the project folder:
-   ```bash
-   git remote add origin https://github.com/<your-username>/<your-repo-name>.git
-   git branch -M main
-   git push -u origin main
-   ```
-   If you extracted this as a plain ZIP (no `.git` folder included), run this first:
-   ```bash
-   git init
-   git add -A
-   git commit -m "Initial commit"
-   ```
-   then the three commands above.
-3. Sanity-check nothing sensitive got committed:
-   ```bash
-   git ls-files | grep -E "secret.key|database.sqlite|settings.json"
-   ```
-   This should print **nothing**. If something shows up, remove it with `git rm --cached <file>`
-   and commit again before pushing.
+| Table | Contents |
+|---|---|
+| `students` | Enrolled students — roll no, name, class/section, email, face encoding |
+| `attendance` | Attendance records — student, subject, class, timestamp |
+| `users` | Login accounts — username, password hash, role (`admin` / regular) |
+
+### Inspecting the database (Railway Console)
+The container doesn't include the `sqlite3` CLI, so use Python's built-in module instead.
+In Railway → your service → **Console** tab:
+
+```bash
+python3
+```
+
+Then inside the Python shell:
+```python
+import sqlite3
+conn = sqlite3.connect('data/database.sqlite')
+cur = conn.cursor()
+
+# List tables
+cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
+print(cur.fetchall())
+
+# View students
+cur.execute("SELECT * FROM students;")
+print(cur.fetchall())
+
+# View attendance
+cur.execute("SELECT * FROM attendance;")
+print(cur.fetchall())
+
+# View a table's columns
+cur.execute("PRAGMA table_info(students);")
+print(cur.fetchall())
+```
+Type `exit()` when done.
 
 ---
 
-## 🚀 Running it locally, end to end
+## 🚀 Running it locally (Windows)
 
 ### 1. Prerequisites
 - Python 3.10 (dlib/face_recognition wheels are most reliable on this version)
 - Windows: Visual Studio Build Tools (C++) if `dlib` needs to compile
-- Linux: `sudo apt-get install build-essential cmake libopenblas-dev liblapack-dev`
 - A webcam
 
 ### 2. Set up
@@ -130,7 +126,6 @@ cd <your-repo-name>
 
 python -m venv venv
 venv\Scripts\activate        # Windows
-source venv/bin/activate     # Linux/Mac
 
 pip install -r requirements.txt
 ```
@@ -150,6 +145,12 @@ Visit **http://127.0.0.1:5000** — you'll be redirected to `/login`.
 
 ### 5. Enroll students
 **Enroll** → Name/Roll/Class(/Email) → Start Camera → capture 5-10 samples → Save.
+
+**Tips for clean face captures** (avoids "No face detected in the captured samples"):
+- Face a light source — don't have a bright window/light behind you.
+- Hold the phone/camera steady, roughly arm's length away, facing you directly.
+- Keep your full face in frame and well-lit (forehead to chin, both eyes visible).
+
 Or use **Bulk Import** (admin) to enroll many students at once from a ZIP of photos.
 
 ### 6. Mark attendance
@@ -166,51 +167,64 @@ self-service check-in with no login.
 
 ---
 
-## ☁️ Deploying this web application
+## ☁️ Deploying (Railway — what this project actually uses)
 
 Face recognition (`dlib`/`face_recognition`) is CPU/memory-heavy with native system libraries, so
-**serverless platforms (plain Vercel/Netlify functions) will not work well** — use a platform that
-gives you a real Linux VM/container.
+**serverless platforms (plain Vercel/Netlify functions) will not work** — Railway gives a real
+container with a Dockerfile build, which is what this repo is set up for.
 
-### Option A — Docker (any VPS: DigitalOcean, AWS EC2, GCP, Azure, Render, Railway, Fly.io)
-```bash
-docker build -t face-attendance .
-docker run -d -p 8000:8000 \
-  -v $(pwd)/data:/srv/app/data \
-  --name face-attendance \
-  face-attendance
+### Steps
+1. Push the repo to GitHub.
+2. On [railway.app](https://railway.app), **New Project → Deploy from GitHub repo** → select the repo.
+   Railway auto-detects the `Dockerfile` and builds it.
+3. **Settings → Volumes** → add a volume mounted at `/srv/app/data`. This is critical — without
+   it, every redeploy wipes the SQLite DB, secret key, and settings (Railway containers have an
+   ephemeral filesystem otherwise).
+4. **Settings → Networking** → click **Generate Domain** for a free `https://<name>.up.railway.app`
+   URL with HTTPS already on (required — browsers block webcam access over plain HTTP for any
+   non-localhost origin). You can rename the subdomain here, or attach a custom domain instead.
+5. Visit the generated URL, log in with `admin` / `admin`, and change the password immediately.
+
+### ⚠️ Dockerfile gotcha we hit (already fixed in this repo)
+The original `CMD` used JSON/exec array form:
+```dockerfile
+CMD ["gunicorn", "-w", "2", "-k", "gthread", "-b", "0.0.0.0:8000", "wsgi:app"]
 ```
-Mounting `data/` keeps your SQLite DB, secret key, and settings across container restarts.
-Visit `http://<your-server-ip>:8000`, and put Nginx/Caddy with HTTPS in front for real use —
-browsers block camera access (`getUserMedia`) on plain HTTP for any non-localhost origin.
+This form does **not** expand shell environment variables, so Railway's injected `$PORT` wasn't
+resolving and the container crash-looped with `Error: '$PORT' is not a valid port number.`
+Fixed by switching to shell form so `${PORT:-8000}` actually expands:
+```dockerfile
+CMD gunicorn -w 2 -k gthread -b 0.0.0.0:${PORT:-8000} wsgi:app
+```
+If you fork/rebuild this project elsewhere and hit the same crash, also check
+**Settings → Deploy → Custom Start Command** in Railway — a value set there overrides the
+Dockerfile's `CMD` entirely and can reintroduce this exact bug.
 
-### Option B — Traditional VPS (no Docker)
-1. SSH in, install Python 3.10 + build tools (see Prerequisites above).
-2. `git clone` the repo, create a venv, `pip install -r requirements.txt`.
-3. Run with a production WSGI server, not the Flask dev server:
-   ```bash
-   gunicorn -w 2 -k gthread -b 0.0.0.0:8000 wsgi:app
-   ```
-4. Put Nginx in front as a reverse proxy with a Let's Encrypt cert (`certbot`), forwarding
-   `443` → `127.0.0.1:8000`.
-5. Use `systemd` (or `supervisor`) to keep gunicorn running and auto-restart on crash.
-
-### Option C — Heroku / Render (Procfile-based)
-1. Push this repo to GitHub (see steps above).
-2. Create a new Web Service on Render (or a Heroku app) pointing at the repo.
-3. It auto-detects `requirements.txt` and the included `Procfile`
-   (`web: gunicorn -w 2 -k gthread -b 0.0.0.0:$PORT wsgi:app`) — no extra config needed.
-4. **Attach a persistent disk** (e.g. Render "Disk") mounted so `data/` survives redeploys —
-   most PaaS containers have ephemeral filesystems, which would otherwise wipe your enrolled
-   students and attendance history on every deploy.
+### Other supported deployment paths
+- **Any VPS + Docker** (DigitalOcean, EC2, GCP, Azure, Render, Fly.io): same `Dockerfile`, put
+  Nginx/Caddy in front for HTTPS.
+- **Traditional VPS, no Docker**: `gunicorn -w 2 -k gthread -b 0.0.0.0:8000 wsgi:app` behind Nginx
+  + certbot, run under systemd.
+- **Heroku/Render (Procfile-based)**: auto-detects `requirements.txt` and the included `Procfile`.
 
 ### Pre-launch checklist
-- [ ] Change the default `admin/admin` password immediately after first login.
-- [ ] Serve over **HTTPS** — required for camera access on any non-localhost domain.
-- [ ] Confirm you're running via `wsgi.py` + gunicorn/waitress, not `python app.py` (dev server).
-- [ ] Persist the `data/` folder outside the container/instance so redeploys don't erase data.
+- [x] Change the default `admin/admin` password immediately after first login.
+- [x] Serve over **HTTPS** — required for camera access on any non-localhost domain.
+- [x] Confirm you're running via `wsgi.py` + gunicorn, not `python app.py` (dev server).
+- [x] Persist the `data/` folder via a mounted volume so redeploys don't erase data.
 - [ ] Back up `data/database.sqlite` regularly (or migrate to Postgres for larger deployments).
-- [ ] Treat `data/secret.key` as a credential — never commit it (already gitignored here).
+- [x] Treat `data/secret.key` as a credential — never commit it (already gitignored).
+
+---
+
+## 🐛 Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Container crash loop, log shows `Error: '$PORT' is not a valid port number.` | Dockerfile `CMD` in exec/array form doesn't expand `$PORT` | Use shell form: `CMD gunicorn ... -b 0.0.0.0:${PORT:-8000} wsgi:app`. Also clear any Custom Start Command in Railway settings. |
+| Browser shows `DNS_PROBE_FINISHED_NXDOMAIN` on the Railway URL | Domain not generated yet, DNS propagation delay, or local ISP/router DNS caching | Confirm domain exists under Settings → Networking; wait a minute and retry; try incognito; switch Windows DNS to `8.8.8.8` / `1.1.1.1` and run `ipconfig /flushdns`. |
+| "No face detected in the captured samples" during Enroll | Backlighting, motion blur, or bad camera angle | Face a light source (don't back it), hold the camera steady at eye level, keep full face in frame and well-lit. |
+| Students/attendance disappear after a redeploy | No persistent volume attached | Add a volume mounted at `/srv/app/data` in Railway Settings → Volumes. |
 
 ---
 

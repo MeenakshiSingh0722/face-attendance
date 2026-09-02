@@ -3,7 +3,7 @@
 A Flask-based attendance system that enrolls students via webcam face samples and
 marks attendance by recognizing faces live, from a group photo, or via a self-service kiosk.
 
-**Live deployment:** `https://face-attendance-system.up.railway.app/` (hosted on Railway)
+**Live deployment:** https://face-attendance-t24u.onrender.com (hosted on Railway)
 
 ---
 

@@ -1,8 +1,11 @@
 flask==3.0.3
 opencv-python-headless>=4.8.0
 numpy>=1.24
-face-recognition>=1.3
-dlib_bin==19.24.6
 flask-login==0.6.3
 gunicorn>=22.0.0
 waitress>=3.0.0
+
+# NOTE: face-recognition, dlib_bin, click, Pillow, and face_recognition_models
+# are installed separately in the Dockerfile (in that specific order) to avoid
+# pip pulling in the real "dlib" source package, which has no prebuilt wheel
+# and caused Render's free-tier build to run out of memory during compilation.
